@@ -1,12 +1,27 @@
-from enum import Enum
+no_turns = 16
 
-no_turns = 12
-wage_n = 12
-wage_s = 12
+no_firm_s_m = 16
+no_firm_s_p = 16
+no_firm_n_m = no_firm_s_p + no_firm_s_m
+no_firm_n_p = 0
 
+wage_s = 16.0
+wage_n = 16.0
 
-class WorkerType(Enum):
-    pass
+capital_s_m = 16.0
+capital_s_p = 17.0
+capital_n_m = 16.0
+capital_n_p = 0.0
+
+productivity_s_m = 1.0
+productivity_s_p = 1.0
+productivity_n_m = 1.0
+productivity_n_p = 1.0
+
+no_workers_s_m = 16
+no_workers_s_p = 16
+no_workers_n_m = 16
+no_workers_n_p = 0
 
 
 class Worker:
@@ -28,17 +43,34 @@ class Firm:
 
 class World:
     def __init__(self):
-        firm = Firm(10, 20, 1, 0.1)
-        pass
+        # Não existem no modelo, até o momento, firmas que produzem bens primários no Norte
+        # no_firm_n_p = 0 não entra no loop
+
+        self.firm_n_p = []
+        for _ in range(no_firm_n_p):
+            self.firm_n_m.append(Firm(no_workers_n_p, wage_n, capital_n_p, productivity_n_p, False))
+
+        self.firm_n_m = []
+        for _ in range(no_firm_n_m):
+            self.firm_n_m.append(Firm(no_workers_n_m, wage_n, capital_n_m, productivity_n_m, False))
+
+        self.firm_s_p = []
+        for _ in range(no_firm_s_p):
+            self.firm_s_p.append(Firm(no_workers_s_p, wage_s, capital_s_p, productivity_s_p))
+
+        self.firm_s_m = []
+        for _ in range(no_firm_s_m):
+            self.firm_s_m.append(Firm(no_workers_s_m, wage_s, capital_s_m, productivity_s_m))
 
     def tick(self):
         pass
 
     def run(self):
         for _ in range(no_turns):
-            pass
+            self.tick()
 
 
 if __name__ == '__main__':
     print('entra na minha casa')
     world = World()
+    world.run()
