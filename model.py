@@ -23,6 +23,8 @@ no_workers_s_p = 16
 no_workers_n_m = 16
 no_workers_n_p = 0
 
+savings_rate = 0.2
+
 
 class Worker:
     def __init__(self, wage, is_south=True, remainder=0):
@@ -38,8 +40,17 @@ class Firm:
             self.workers.append(Worker(initial_wage, is_south))
 
         self.capital = capital
+        self.last_capital = self.capital
         self.productivity = productivity
 
+    def y(self):
+        return self.capital / self.property
+
+    def update(self):
+        pass
+
+    def update_capital_s_p(self):
+        return self.last_capital + self.last_y * savings_rate
 
 class World:
     def __init__(self):
