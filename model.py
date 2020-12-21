@@ -1,15 +1,24 @@
+import math
+
 no_turns = 16
+
+wage_s = 16.0
+wage_n = 16.0
+
+real_wage = 8
+init_primary_price = 1
+init_manufacture_price = 1
+
+init_markup = 1
 
 no_firm_s_m = 16
 no_firm_s_p = 16
 no_firm_n_m = no_firm_s_p + no_firm_s_m
 no_firm_n_p = 0
 
+market_share_sensibility = 0.1
 gamma_0 = 0.2
 gamma_1 = 0.1
-
-wage_s = 16.0
-wage_n = 16.0
 
 capital_s_m = 16.0
 capital_s_p = 17.0
@@ -44,7 +53,7 @@ class Worker:
 
 
 class Firm:
-    def __init__(self, no_workers, initial_wage, capital, productivity, is_south=True, is_primary=True,):
+    def __init__(self, no_workers, initial_wage, capital, productivity, is_south=True, is_primary=True):
         self.workers = []
         for _ in range(no_workers):
             self.workers.append(Worker(initial_wage, is_south))
@@ -53,7 +62,18 @@ class Firm:
         self.last_capital = self.capital
         self.productivity = productivity
         self.demand = self.init_demand(is_south, is_primary)
-        self.get_investment = self._get_investment_primary if is_primary else self._get_investment_manufacture
+        self.market_share = None if is_primary else 1 / (no_firm_s_m + no_firm_n_m)
+        self.last_market_share = self.market_share
+        self.markup = init_markup
+        if is_primary:
+            self.get_investment = self._get_investment_primary
+            self.get_price = self._get_primary_price
+            self.price = init_primary_price
+
+        else:
+            self.get_investment = self._get_investment_manufacture
+            self.get_price = self._get_manufacture_price
+            self.price = init_manufacture_price
 
     @staticmethod
     def init_demand(is_south, is_primary):
@@ -72,21 +92,50 @@ class Firm:
     def get_ex_demand(self):
         return sum([a[0] * a[1] for a in tuple(zip(self.demand, demand_series_weight))])
 
+    # TODO: O investimento do setor primario está em função da renda, precisa ficar em função o capital
     def _get_investment_primary(self):
         return self.last_y * savings_rate
 
     def _get_investment_manufacture(self):
         return (gamma_0 + gamma_1 * (self.get_ex_demand() / self.productivity)) * self.capital
 
-    # TODO: refazer porque precisa olhar a demanda experada
-    def y(self):
-        return self.capital / self.property
+    def get_allocated_capital(self):
+        return self.get_ex_demand() / self.productivity
+
+    def get_allocated_labor(self):
+        # Como a função é do tipo
+        return math.ceil(self.get_allocated_capital() * self.productivity)
 
     def update(self):
         pass
 
     def update_capital_s_p(self):
         return self.last_capital + self.last_y * savings_rate
+
+    def get_y(self):
+        return self.get_allocated_capital() / self.productivity
+
+    def get_market_share(self, total_y):
+        return self.get_y() / total_y
+
+    def get_markup(self, total_y):
+        return self.markup * (market_share_sensibility * (self.get_market_share(total_y) -
+                                                          self.last_market_share) / self.last_market_share)
+
+    @staticmethod
+    def _get_wage_primary(mean_price):
+        return real_wage * mean_price
+
+    # TODO: EMBRODO, problema de circularidade e problema de lógica nos salarios (rever literatura)
+
+    def _get_wage_manufacture(self, mean_price):
+        return (self.get_y() / self.get_allocated_labor()) * (1 / 1 + self.get_markup())
+
+    def _get_primary_price(self):
+        return
+
+    def _get_manufacture_price(self):
+        return
 
 
 class World:
@@ -109,6 +158,13 @@ class World:
         self.firm_s_m = []
         for _ in range(no_firm_s_m):
             self.firm_s_m.append(Firm(no_workers_s_m, wage_s, capital_s_m, productivity_s_m, is_primary=False))
+
+    def get_mean_primary_south_price(self):
+        mean = 0
+        for firm in self.firm_s_p:
+            mean += firm.price
+        mean = mean / len(self.firm_s_p)
+        return mean
 
     def tick(self):
         print(self.firm_s_p[0].get_investment())
