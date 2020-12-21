@@ -46,7 +46,7 @@ savings_rate = 0.2
 
 
 class Worker:
-    def __init__(self, wage, is_south=True, remainder=0):
+    def __init__(self, wage, is_south=True, remainder=0.0):
         self.wage = wage
         self.remainder = remainder
         self.is_south = is_south
@@ -65,16 +65,22 @@ class Firm:
         self.market_share = None if is_primary else 1 / (no_firm_s_m + no_firm_n_m)
         self.last_market_share = self.market_share
         self.markup = init_markup
+        self.production = 0
+        self.price = 0
+        self.investment = 0
+        self.is_south = is_south
         if is_primary:
             self.get_investment = self._get_investment_primary
             self.get_price = self._get_primary_price
             self.price = init_primary_price
+            self.get_wage = self._get_wage_primary
 
         else:
             self.get_investment = self._get_investment_manufacture
             self.get_price = self._get_manufacture_price
             self.price = init_manufacture_price
-
+            self.get_wage = self._get_wage_manufacture
+            
     @staticmethod
     def init_demand(is_south, is_primary):
         if is_south:
@@ -106,17 +112,14 @@ class Firm:
         # Como a função é do tipo
         return math.ceil(self.get_allocated_capital() * self.productivity)
 
-    def update(self):
-        pass
-
     def update_capital_s_p(self):
         return self.last_capital + self.last_y * savings_rate
 
-    def get_y(self):
+    def get_production(self):
         return self.get_allocated_capital() / self.productivity
 
     def get_market_share(self, total_y):
-        return self.get_y() / total_y
+        return self.get_production() / total_y
 
     def get_markup(self, total_y):
         return self.markup * (market_share_sensibility * (self.get_market_share(total_y) -
@@ -129,13 +132,29 @@ class Firm:
     # TODO: EMBRODO, problema de circularidade e problema de lógica nos salarios (rever literatura)
 
     def _get_wage_manufacture(self, mean_price):
-        return (self.get_y() / self.get_allocated_labor()) * (1 / 1 + self.get_markup())
+        return (self.get_production() / self.get_allocated_labor()) * (1 / 1 + self.get_markup())
 
     def _get_primary_price(self):
-        return
+        return 0
 
     def _get_manufacture_price(self):
-        return
+        return 0
+
+    def update_workers(self, mean_price):
+        remainder = 0
+        for worker in self.workers:
+            remainder += worker.remainder
+        no_workers = self.get_allocated_labor()
+        self.workers = []
+        for _ in range(no_workers):
+            self.workers.append(Worker(self.get_wage(mean_price), self.is_south, remainder / no_workers))
+
+    def update(self, mean_price):
+        self.capital += self.get_investment()
+        self.update_workers(mean_price)
+        self.production = self.get_production()
+        self.price = self.get_price()
+        pass
 
 
 class World:
@@ -143,31 +162,40 @@ class World:
         # Não existem no modelo, até o momento, firmas que produzem bens primários no Norte
         # no_firm_n_p = 0 não entra no loop
 
-        self.firm_n_p = []
+        self.firms_n_p = []
         for _ in range(no_firm_n_p):
-            self.firm_n_m.append(Firm(no_workers_n_p, wage_n, capital_n_p, productivity_n_p, False))
+            self.firms_n_m.append(Firm(no_workers_n_p, wage_n, capital_n_p, productivity_n_p, False))
 
-        self.firm_n_m = []
+        self.firms_n_m = []
         for _ in range(no_firm_n_m):
-            self.firm_n_m.append(Firm(no_workers_n_m, wage_n, capital_n_m, productivity_n_m, False, False))
+            self.firms_n_m.append(Firm(no_workers_n_m, wage_n, capital_n_m, productivity_n_m, False, False))
 
-        self.firm_s_p = []
+        self.firms_s_p = []
         for _ in range(no_firm_s_p):
-            self.firm_s_p.append(Firm(no_workers_s_p, wage_s, capital_s_p, productivity_s_p))
+            self.firms_s_p.append(Firm(no_workers_s_p, wage_s, capital_s_p, productivity_s_p))
 
-        self.firm_s_m = []
+        self.firms_s_m = []
         for _ in range(no_firm_s_m):
-            self.firm_s_m.append(Firm(no_workers_s_m, wage_s, capital_s_m, productivity_s_m, is_primary=False))
+            self.firms_s_m.append(Firm(no_workers_s_m, wage_s, capital_s_m, productivity_s_m, is_primary=False))
 
     def get_mean_primary_south_price(self):
         mean = 0
-        for firm in self.firm_s_p:
+        for firm in self.firms_s_p:
             mean += firm.price
-        mean = mean / len(self.firm_s_p)
+        mean = mean / len(self.firms_s_p)
         return mean
 
     def tick(self):
-        print(self.firm_s_p[0].get_investment())
+        print(self.firms_s_p[0].get_investment())
+        mean_price = 0
+        if len(self.firms_s_p) + len(self.firms_n_m) != 0:
+            for firm in self.firms_s_p + self.firms_n_p:
+                mean_price += firm.price
+            mean_price /= (len(self.firms_s_p) + len(self.firms_n_p))
+
+        for firm in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
+            firm.update(mean_price)
+        # Investir em P&D (aqui)
         pass
 
     def run(self):
