@@ -1,8 +1,11 @@
 #include <stdio.h>
+#include <math.h>
+
 typedef enum {false, true} bool;
 #define NELEMS(x)  (sizeof(x) / sizeof((x)[0]))
 
-int no_turns = 4;
+int firm_update_counter = 0;
+int no_turns = 1000;
 
 float wage_s = 16.0;
 float wage_n = 16.0;
@@ -40,22 +43,29 @@ float productivity_s_p = 1.0;
 float productivity_n_m = 1.0;
 float productivity_n_p = 1.0;
 
-int no_workers_s_m = 16;
-int no_workers_s_p = 16;
-int no_workers_n_m = 16;
+int no_workers_s_m = 50;
+int no_workers_s_p = 50;
+int no_workers_n_m = 100;
 int no_workers_n_p = 0;
 
+
+struct World world;
+const int firm_arr_size = 128;
+const int workers_arr_size = 128;
 float savings_rate = 0.2;
 struct Worker
 {
 	float wage;
 	float remainder;
 	bool is_south;
+	bool initialized;
 };
+
 
 struct Firm
 {
-	struct Worker workers[128];
+	struct Worker workers[workers_arr_size];
+	int no_workers;
 	float last_y;
 	float capital;
 	float last_capital;
@@ -69,14 +79,15 @@ struct Firm
 	float investment;
 	bool is_south;
 	bool is_primary;
+	bool initialized;
 };
 
 struct World
 {
-	struct Firm firm_s_p[128];
-	struct Firm firm_s_m[128];
-	struct Firm firm_n_p[128];
-	struct Firm firm_n_m[128];
+	struct Firm firm_s_p[firm_arr_size];
+	struct Firm firm_s_m[firm_arr_size];
+	struct Firm firm_n_p[firm_arr_size];
+	struct Firm firm_n_m[firm_arr_size];
 };
 
 float * get_demand_ptr(bool is_south, bool is_primary){
@@ -106,18 +117,26 @@ float * get_demand_ptr(bool is_south, bool is_primary){
 
 }
 
+struct Worker buildWorker(float wage, bool is_south, float remainder)
+{
+	struct Worker w;
+	w.wage = wage;
+	w.is_south = is_south;
+	w.remainder = 0;
+	w.initialized = true;
+
+	return w;
+}
+
 struct Firm buildFirm(int no_workers, float ini_w, float capital, float productivity, bool is_south, bool is_primary){
 	struct Firm f;
 
 	for (int i = 0; i < no_workers; ++i)
 	{
-		struct Worker w;
-		w.wage = ini_w;
-		w.is_south = is_south;
-		w.remainder = 0;
-
-		f.workers[i] = w;
+		f.workers[i] = buildWorker(ini_w, is_south, 0);
 	}
+
+	f.no_workers = no_workers;
 
 	f.last_y = 2;
 	f.capital = capital;
@@ -128,7 +147,6 @@ struct Firm buildFirm(int no_workers, float ini_w, float capital, float producti
 	for (int i = 0; i < demand_series_lenght; ++i)
 	{
 		f.demand[i] = p[i];
-		printf("%f\n", f.demand[i] );
 	}
 
 	f.market_share = is_primary ? 0 : 1 / no_firm_s_m + no_firm_n_m;
@@ -136,6 +154,7 @@ struct Firm buildFirm(int no_workers, float ini_w, float capital, float producti
 	f.production = 5;
 	f.price = 2;
 	f.investment = 0;
+	f.initialized = true;
 
 	return f;
 }
@@ -145,13 +164,11 @@ struct World buildWorld(){
 	for (int i = 0; i < no_firm_s_p; ++i)
 	{
 		world.firm_s_p[i] = buildFirm(no_workers_s_p, wage_s, capital_s_p, productivity_s_p, true, true);
-		
 	}
 
 	for (int i = 0; i < no_firm_s_m; ++i)
 	{
 		world.firm_s_m[i] = buildFirm(no_workers_s_m, wage_s, capital_s_m, productivity_s_m, true, true);
-		
 	}
 
 	for (int i = 0; i < no_firm_n_p; ++i)
@@ -167,12 +184,154 @@ struct World buildWorld(){
 	}
 	return world;
 }
+
+float getMeanPrimarySouthPrice(){
+	float mean = 0;
+	for (int i = 0; i < firm_arr_size; ++i)
+	{
+		if (! world.firm_s_p[i].initialized){
+			break;
+		}
+		mean += world.firm_s_p[i].price;
+	}
+
+	return mean;
+}
+
+float getExDemand(struct Firm * firm){
+	float sum = 0;
+	for (int i = 0; i < demand_series_lenght; ++i)
+	{
+		sum += firm->demand[i] * demand_series_weight[i];
+	}
+	return sum;
+}
+
+float getFirmInvestment(struct Firm * firm){
+	if(firm->is_primary){
+		return firm->last_y * savings_rate;
+	}
+	else{
+		return (gamma_0 + gamma_1 * (getExDemand(firm) / firm->productivity * firm->capital));
+	}
+}
+
+float getAllocatedCapital(struct Firm * firm){
+	if(firm->productivity <= 0){
+		return 0;
+	}
+	return getExDemand(firm) / firm->productivity;
+}
+
+int getAllocatedLabour(struct Firm * firm){
+	return (int)getAllocatedCapital(firm) * firm->productivity;
+}
+
+void updateWorkers(struct Firm * firm, float mean_price, float totalProduction){
+	float remainder = 0;
+	for (int i = 0; i < workers_arr_size; i++)
+	{
+		if (! firm->workers[i].initialized)
+		{
+			break;
+		}
+		remainder += firm->workers[i].remainder;
+	}
+	int no_workers = getAllocatedLabour(firm);
+	for (int i = 0; i < no_workers; ++i)
+	{
+		firm->workers[i] = buildWorker(mean_price, firm->is_south, remainder/no_workers);
+	}
+
+	//printf("No workers: %i\n is south: %i is_primary: %i",no_workers, firm->is_south, firm->is_primary );
+	for (int i = no_workers; i < workers_arr_size; i++)
+	{
+		if(!firm->workers[i].initialized){
+			break;
+		}
+		firm->workers[i].initialized = false;
+	}
+}
+
+void updateFirm(struct Firm *firm , float mean_price, float totalProduction){
+	firm->capital = getFirmInvestment(firm);
+	updateWorkers(firm, mean_price, totalProduction);
+	firm->production = getAllocatedCapital(firm) / firm->productivity;
+	firm->price = 1;
+	firm_update_counter++;
+
+}
+
 void tick(int turn){
 	printf("Turn %i\n",turn );
+
+	float totalProduction = 0;
+	for (int i = 0; i < firm_arr_size; ++i)
+	{
+		if (!world.firm_s_m[i].initialized && !world.firm_n_m[i].initialized){
+			break;
+		}
+
+		if (world.firm_s_m[i].initialized){
+			totalProduction += world.firm_s_m[i].production;
+		}
+		if (world.firm_n_m[i].initialized){
+			totalProduction += world.firm_n_m[i].production;
+		}
+	}
+
+	float mean_price = 0;
+	int count = 0;
+	for (int i = 0; i < firm_arr_size; ++i)
+	{
+		if (!world.firm_s_p[i].initialized && !world.firm_n_p[i].initialized){
+			break;
+		}
+
+		if (world.firm_s_p[i].initialized){
+			mean_price += world.firm_s_m[i].price;
+			count++;
+		}
+		if (world.firm_n_p[i].initialized){
+			mean_price += world.firm_n_m[i].price;
+			count++;
+		}
+	}
+	mean_price /= count;
+
+	for (int i = 0; i < firm_arr_size; ++i)
+	{
+		if((!world.firm_s_p[i].initialized && !world.firm_s_m[i].initialized && !world.firm_n_p[i].initialized && !world.firm_n_m[i].initialized)){
+			break;
+		}
+
+		if (world.firm_s_p[i].initialized)
+		{
+			updateFirm(&world.firm_s_p[i], mean_price, totalProduction);
+		}
+
+		if (world.firm_s_m[i].initialized)
+		{
+			updateFirm(&world.firm_s_m[i], mean_price, totalProduction);
+		}
+
+		if (world.firm_n_p[i].initialized)
+		{
+			updateFirm(&world.firm_n_p[i], mean_price, totalProduction);
+		}
+
+		if (world.firm_n_m[i].initialized)
+		{
+			updateFirm(&world.firm_n_m[i], mean_price, totalProduction);
+		}
+
+
+	}
+	//printf("Mean price: %f and totalProduction: %f\n", mean_price, totalProduction );
 }
 
 void run(){
-	struct World world = buildWorld();
+	world = buildWorld();
 
 	for(int i = 0; i < no_turns; i++){
 		tick(i);
@@ -182,5 +341,6 @@ void run(){
 
 int main(){
 	run();
+	printf("Firms updated: %i\n", firm_update_counter );
 	return 0;
 }
