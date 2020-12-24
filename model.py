@@ -265,33 +265,34 @@ class World:
         firms_by_price_p = self.firms_s_p + self.firms_n_p
         firms_by_price_p.sort(key=lambda x: x.price, reverse=False)
 
-        for firm in firms_by_price_p:
-            for firm_w in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
-                amount_to_buy = firm.production * firm_w.get_primary_demand() / total_primary_demand
+        for seller in firms_by_price_p:
+            # TODO: demanda deve ser recalculada a cada novo vendedor
+            for buyer in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
+                amount_to_buy = seller.production * buyer.get_primary_demand() / total_primary_demand
 
                 # Venda
-                if firm.is_south:
-                    if firm.is_primary:
-                        self.firms_s_p[firm.id].profit += amount_to_buy
+                if seller.is_south:
+                    if seller.is_primary:
+                        self.firms_s_p[seller.id].profit += amount_to_buy
                     else:
-                        self.firms_s_m[firm.id].profit += amount_to_buy
+                        self.firms_s_m[seller.id].profit += amount_to_buy
                 else:
-                    if firm.is_primary:
-                        self.firms_n_p[firm.id].profit += amount_to_buy
+                    if seller.is_primary:
+                        self.firms_n_p[seller.id].profit += amount_to_buy
                     else:
-                        self.firms_n_m[firm.id].profit += amount_to_buy
+                        self.firms_n_m[seller.id].profit += amount_to_buy
 
                 # Compra
-                if firm_w.is_south:
-                    if firm_w.is_primary:
-                        self.firms_s_p[firm_w.id].profit -= amount_to_buy
+                if buyer.is_south:
+                    if buyer.is_primary:
+                        self.firms_s_p[buyer.id].profit -= amount_to_buy
                     else:
-                        self.firms_s_m[firm_w.id].profit -= amount_to_buy
+                        self.firms_s_m[buyer.id].profit -= amount_to_buy
                 else:
-                    if firm_w.is_primary:
-                        self.firms_n_p[firm_w.id].profit -= amount_to_buy
+                    if buyer.is_primary:
+                        self.firms_n_p[buyer.id].profit -= amount_to_buy
                     else:
-                        self.firms_n_m[firm_w.id].profit -= amount_to_buy
+                        self.firms_n_m[buyer.id].profit -= amount_to_buy
 
         # Investir em P&D (aqui)
 
