@@ -1,6 +1,8 @@
 import math
+import time
+from random import shuffle
 
-no_turns = 4
+no_turns = 1000
 
 wage_s = 16.0
 wage_n = 16.0
@@ -11,8 +13,8 @@ init_manufacture_price = 1
 
 init_markup = 1
 
-no_firm_s_m = 2
-no_firm_s_p = 2
+no_firm_s_m = 50
+no_firm_s_p = 50
 no_firm_n_m = no_firm_s_p + no_firm_s_m
 no_firm_n_p = 0
 
@@ -69,10 +71,16 @@ class Firm:
         self.last_market_share = self.market_share
         self.markup = init_markup
         self.production = 5
-        self.price = 0
+        self.price = 1
         self.investment = 0
         self.is_south = is_south
         self.is_primary = is_primary
+        self.id = -1
+        self.last_profit = capital * productivity * self.price
+        self.profit = self.last_profit
+        self.primary_spend_rate = .4
+        self.worker_primary_spend_rate = 1 if is_south else .5
+
         if is_primary:
             self.get_investment = self._get_investment_primary
             self.get_price = self._get_primary_price
@@ -146,11 +154,11 @@ class Firm:
     def _get_wage_manufacture(self, mean_price, total_production):
         return (self.get_production() / self.get_allocated_labor()) * (1 / 1 + self.get_markup(total_production))
 
-    def _get_primary_price(self):
-        return 1
+    def _get_primary_price(self, mean_price, total_production):
+        return (1 + self.markup) * self.productivity * self.get_wage(mean_price, total_production)
 
-    def _get_manufacture_price(self):
-        return 1
+    def _get_manufacture_price(self, mean_price, total_production):
+        return (1 + self.markup) * self.productivity * self.get_wage(mean_price, total_production)
 
     def update_workers(self, mean_price, total_production):
         remainder = 0
@@ -162,19 +170,30 @@ class Firm:
             self.workers.append(Worker(self.get_wage(mean_price, total_production),
                                        self.is_south, remainder / no_workers))
 
+    def get_primary_demand(self):
+        return self.last_profit * self.primary_spend_rate + \
+               self.workers[0].wage * len(self.workers) * self.worker_primary_spend_rate
+
+    def get_manufacture_demand(self):
+        return self.last_profit * (1 - self.primary_spend_rate) + \
+               self.workers[0].wage * len(self.workers) * (1 - self.worker_primary_spend_rate)
+
     def update(self, mean_price, total_production):
         self.capital += self.get_investment()
         self.update_workers(mean_price, total_production)
         self.production = self.get_production()
-        self.price = self.get_price()
+        self.price = self.get_price(mean_price, total_production)
+        self.profit = 0
         pass
 
 
 class World:
     def __init__(self):
+        firms_by_price = []
         # Não existem no modelo, até o momento, firmas que produzem bens primários no Norte
         # no_firm_n_p = 0 não entra no loop
-
+        self.t = 0
+        self.start_time = time.time()
         self.firms_n_p = []
         for _ in range(no_firm_n_p):
             self.firms_n_m.append(Firm(no_workers_n_p, wage_n, capital_n_p, productivity_n_p, False))
@@ -199,7 +218,7 @@ class World:
         return mean
 
     def tick(self):
-        print(self.firms_s_p[0].get_investment())
+        print(f'--- {self.t} ------')
         mean_price = 0
         total_production = 0
 
@@ -211,16 +230,81 @@ class World:
                 mean_price += firm.price
             mean_price /= (len(self.firms_s_p) + len(self.firms_n_p))
 
-        for firm in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
+        total_primary_demand = 0
+        i = 0
+        for firm in self.firms_s_p:
             firm.update(mean_price, total_production)
+            total_primary_demand += firm.get_primary_demand()
+            firm.id = i
+            i += 1
+        i = 0
+
+        for firm in self.firms_s_m:
+            firm.update(mean_price, total_production)
+            total_primary_demand += firm.get_primary_demand()
+            firm.id = i
+            i += 1
+        i = 0
+
+        for firm in self.firms_n_p:
+            firm.update(mean_price, total_production)
+            total_primary_demand += firm.get_primary_demand()
+            firm.id = i
+            i += 1
+        i = 0
+
+        for firm in self.firms_n_m:
+            firm.update(mean_price, total_production)
+            total_primary_demand += firm.get_primary_demand()
+            firm.id = i
+            i += 1
+
+        firms_by_price_m = self.firms_s_m + self.firms_n_m
+        firms_by_price_m.sort(key=lambda x: x.price, reverse=False)
+
+        firms_by_price_p = self.firms_s_p + self.firms_n_p
+        firms_by_price_p.sort(key=lambda x: x.price, reverse=False)
+
+        for firm in firms_by_price_p:
+            for firm_w in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
+                amount_to_buy = firm.production * firm_w.get_primary_demand() / total_primary_demand
+
+                # Venda
+                if firm.is_south:
+                    if firm.is_primary:
+                        self.firms_s_p[firm.id].profit += amount_to_buy
+                    else:
+                        self.firms_s_m[firm.id].profit += amount_to_buy
+                else:
+                    if firm.is_primary:
+                        self.firms_n_p[firm.id].profit += amount_to_buy
+                    else:
+                        self.firms_n_m[firm.id].profit += amount_to_buy
+
+                # Compra
+                if firm_w.is_south:
+                    if firm_w.is_primary:
+                        self.firms_s_p[firm_w.id].profit -= amount_to_buy
+                    else:
+                        self.firms_s_m[firm_w.id].profit -= amount_to_buy
+                else:
+                    if firm_w.is_primary:
+                        self.firms_n_p[firm_w.id].profit -= amount_to_buy
+                    else:
+                        self.firms_n_m[firm_w.id].profit -= amount_to_buy
+
         # Investir em P&D (aqui)
+
+        self.t += 1
 
     def run(self):
         for _ in range(no_turns):
             self.tick()
+        print(f'Simulation finished after:{time.time() - self.start_time}')
 
 
 if __name__ == '__main__':
-    print('entra na minha casa')
+    print('NS MODEL RUNNING')
     world = World()
     world.run()
+    print('NS MODEL FINISHING')
