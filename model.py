@@ -80,6 +80,7 @@ class Firm:
         self.profit = self.last_profit
         self.primary_spend_rate = .4
         self.worker_primary_spend_rate = 1 if is_south else .5
+        self.workers_wage_availability = 1.0
 
         if is_primary:
             self.get_investment = self._get_investment_primary
@@ -161,18 +162,23 @@ class Firm:
         return (1 + self.markup) * self.productivity * self.get_wage(mean_price, total_production)
 
     def update_workers(self, mean_price, total_production):
-        remainder = 0
+        remainder = 0 # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
         for worker in self.workers:
             remainder += worker.remainder
+
+        wage = self.get_wage(mean_price, total_production)
         no_workers = self.get_allocated_labor()
         self.workers = []
-        for _ in range(no_workers):
+        for _ in range(no_workers): # -1 é o ultimo elemento da lista que é mais rapida com "_"
             self.workers.append(Worker(self.get_wage(mean_price, total_production),
                                        self.is_south, remainder / no_workers))
+            self.workers[-1].remainder += wage
 
-    def get_primary_demand(self):
-        return self.last_profit * self.primary_spend_rate + \
-               self.workers[0].wage * len(self.workers) * self.worker_primary_spend_rate
+    def get_primary_demand_firm(self):
+        return self.last_profit * self.primary_spend_rate
+
+    def get_primary_demand_workers(self):
+        return self.workers[0].remainder * len(self.workers) * self.worker_primary_spend_rate
 
     def get_manufacture_demand(self):
         return self.last_profit * (1 - self.primary_spend_rate) + \
@@ -184,7 +190,6 @@ class Firm:
         self.production = self.get_production()
         self.price = self.get_price(mean_price, total_production)
         self.profit = 0
-        pass
 
 
 class World:
@@ -217,6 +222,28 @@ class World:
         mean = mean / len(self.firms_s_p)
         return mean
 
+    def get_total_primary_demand_tuple(self):
+        total_firm_primary_demand = 0
+        total_workers_primary_demand = 0
+
+        for firm in self.firms_s_p:
+            total_firm_primary_demand += firm.get_primary_demand_firm()
+            total_workers_primary_demand += firm.get_primary_demand_workers()
+
+        for firm in self.firms_s_m:
+            total_firm_primary_demand += firm.get_primary_demand_firm()
+            total_workers_primary_demand += firm.get_primary_demand_workers()
+
+        for firm in self.firms_n_p:
+            total_firm_primary_demand += firm.get_primary_demand_firm()
+            total_workers_primary_demand += firm.get_primary_demand_workers()
+
+        for firm in self.firms_n_m:
+            total_firm_primary_demand += firm.get_primary_demand_firm()
+            total_workers_primary_demand += firm.get_primary_demand_workers()
+
+        return total_firm_primary_demand, total_workers_primary_demand
+
     def tick(self):
         print(f'--- {self.t} ------')
         mean_price = 0
@@ -230,32 +257,27 @@ class World:
                 mean_price += firm.price
             mean_price /= (len(self.firms_s_p) + len(self.firms_n_p))
 
-        total_primary_demand = 0
         i = 0
         for firm in self.firms_s_p:
             firm.update(mean_price, total_production)
-            total_primary_demand += firm.get_primary_demand()
             firm.id = i
             i += 1
         i = 0
 
         for firm in self.firms_s_m:
             firm.update(mean_price, total_production)
-            total_primary_demand += firm.get_primary_demand()
             firm.id = i
             i += 1
         i = 0
 
         for firm in self.firms_n_p:
             firm.update(mean_price, total_production)
-            total_primary_demand += firm.get_primary_demand()
             firm.id = i
             i += 1
         i = 0
 
         for firm in self.firms_n_m:
             firm.update(mean_price, total_production)
-            total_primary_demand += firm.get_primary_demand()
             firm.id = i
             i += 1
 
@@ -267,32 +289,41 @@ class World:
 
         for seller in firms_by_price_p:
             # TODO: demanda deve ser recalculada a cada novo vendedor
+
+            total_primary_demand = self.get_total_primary_demand_tuple()
+
             for buyer in self.firms_s_p + self.firms_s_m + self.firms_n_p + self.firms_n_m:
-                amount_to_buy = seller.production * buyer.get_primary_demand() / total_primary_demand
+                amount_to_buy = seller.production * buyer.get_primary_demand_firm() / total_primary_demand[0]
+                amount_to_buy_w = seller.production * buyer.get_primary_demand_workers() / total_primary_demand[1]
 
                 # Venda
                 if seller.is_south:
                     if seller.is_primary:
-                        self.firms_s_p[seller.id].profit += amount_to_buy
+                        self.firms_s_p[seller.id].profit += amount_to_buy + amount_to_buy_w
                     else:
-                        self.firms_s_m[seller.id].profit += amount_to_buy
+                        self.firms_s_m[seller.id].profit += amount_to_buy + amount_to_buy_w
                 else:
                     if seller.is_primary:
-                        self.firms_n_p[seller.id].profit += amount_to_buy
+                        self.firms_n_p[seller.id].profit += amount_to_buy + amount_to_buy_w
                     else:
-                        self.firms_n_m[seller.id].profit += amount_to_buy
+                        self.firms_n_m[seller.id].profit += amount_to_buy + amount_to_buy_w
 
                 # Compra
                 if buyer.is_south:
                     if buyer.is_primary:
-                        self.firms_s_p[buyer.id].profit -= amount_to_buy
+                        self.firms_s_p[buyer.id].last_profit -= amount_to_buy
+                        self.firms_s_p[buyer.id].workers[0].remainder -= amount_to_buy_w / len(self.firms_s_p[buyer.id].workers)
                     else:
-                        self.firms_s_m[buyer.id].profit -= amount_to_buy
+                        self.firms_s_m[buyer.id].last_profit -= amount_to_buy
+                        self.firms_s_m[buyer.id].workers[0].remainder -= amount_to_buy_w / len(self.firms_s_m[buyer.id].workers)
                 else:
                     if buyer.is_primary:
-                        self.firms_n_p[buyer.id].profit -= amount_to_buy
+                        self.firms_n_p[buyer.id].last_profit -= amount_to_buy
+                        self.firms_n_p[buyer.id].workers[0].remainder -= amount_to_buy_w / len(self.firms_n_p[buyer.id].workers)
+
                     else:
-                        self.firms_n_m[buyer.id].profit -= amount_to_buy
+                        self.firms_n_m[buyer.id].last_profit -= amount_to_buy
+                        self.firms_n_m[buyer.id].workers[0].remainder -= amount_to_buy_w / len(self.firms_n_m[buyer.id].workers)
 
         # Investir em P&D (aqui)
 
