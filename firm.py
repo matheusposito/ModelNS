@@ -11,7 +11,7 @@ class Firm:
         self.workers = []
         for _ in range(no_workers):
             self.workers.append(Worker(initial_wage, is_south))
-        self.last_y = 2
+        self.last_y = 2 # TODO: Corrigir para production / last.production
         self.capital = capital
         self.last_capital = self.capital
         self.productivity = productivity
@@ -68,7 +68,7 @@ class Firm:
         return (gamma_0 + gamma_1 * (self.get_ex_demand() / self.productivity)) * self.capital
 
     def get_allocated_capital(self):
-        return self.get_ex_demand() / self.productivity
+        return min(self.get_ex_demand() / self.productivity, self.capital / self.productivity)
 
     def get_allocated_labor(self):
         # Como a função é do tipo
@@ -111,9 +111,7 @@ class Firm:
         return (1 + self.markup) * self.productivity * self.get_wage(mean_price, total_production)
 
     def update_workers(self, mean_price, total_production):
-        remainder = 0 # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
-        for worker in self.workers:
-            remainder += worker.remainder
+        remainder = self.workers[0].remainder # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
 
         wage = self.get_wage(mean_price, total_production)
         no_workers = self.get_allocated_labor()

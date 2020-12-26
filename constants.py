@@ -1,5 +1,5 @@
 
-no_turns = 1000
+no_turns = 10
 
 wage_s = 16.0
 wage_n = 16.0
@@ -10,8 +10,8 @@ init_manufacture_price = 1
 
 init_markup = 1
 
-no_firm_s_m = 50
-no_firm_s_p = 50
+no_firm_s_m = 3
+no_firm_s_p = 3
 no_firm_n_m = no_firm_s_p + no_firm_s_m
 no_firm_n_p = 0
 

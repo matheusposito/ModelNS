@@ -1,6 +1,7 @@
 import time
 from constants import *
 from firm import Firm
+import matplotlib.pyplot as plt
 
 class World:
     def __init__(self):
@@ -54,10 +55,13 @@ class World:
 
         return total_firm_primary_demand, total_workers_primary_demand
 
+    y = []
+    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tfirm.workers[0].remainder\tfirm.workers[1].remainder\n'
     def tick(self):
         print(f'--- {self.t} ------')
         mean_price = 0
         total_production = 0
+
 
         for firm in self.firms_n_m + self.firms_s_m:
             total_production += firm.price * firm.production
@@ -137,9 +141,17 @@ class World:
 
         # Investir em P&D (aqui)
 
+        self.y.append(mean_price)
         self.t += 1
+        for firm in self.firms_s_p + self.firms_s_m + self.firms_n_m + self.firms_n_p:
+            self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand}\t{firm.workers[0].remainder}\t{firm.workers[1].remainder}\n'
 
     def run(self):
         for _ in range(no_turns):
             self.tick()
+        plt.plot(range(len(self.y)), self.y)
+        # plt.show()
+        with open('debug.tsv', 'w') as file:
+            file.write(self.csv)
+
         print(f'Simulation finished after:{time.time() - self.start_time}')
