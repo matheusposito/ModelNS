@@ -31,10 +31,16 @@ demand_n_p = 0
 
 demand_series_weight = [.6, .5, .4]
 
-productivity_s_m = 1.0
-productivity_s_p = 1.0
-productivity_n_m = 1.0
-productivity_n_p = 1.0
+labor_productivity_s_m = 1.0
+labor_productivity_s_p = 1.0
+labor_productivity_n_m = 1.0
+labor_productivity_n_p = 1.0
+
+capital_productivity_s_m = 1.0
+capital_productivity_s_p = 1.0
+capital_productivity_n_m = 1.0
+capital_productivity_n_p = 1.0
+
 
 no_workers_s_m = 16
 no_workers_s_p = 16
