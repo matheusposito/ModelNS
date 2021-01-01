@@ -2,6 +2,8 @@ import time
 from constants import *
 from firm import Firm
 import matplotlib.pyplot as plt
+from scipy.stats import beta
+
 
 class World:
     def __init__(self):
@@ -13,19 +15,21 @@ class World:
         self.firms = []
         self.firms_n_p = []
         for _ in range(no_firm_n_p):
-            self.firms.append(Firm(no_workers_n_p, wage_n, capital_n_p, False))
+            self.firms.append(Firm(wage_n, capital_n_p, False))
 
         self.firms_n_m = []
         for _ in range(no_firm_n_m):
-            self.firms.append(Firm(no_workers_n_m, wage_n, capital_n_m, False, False))
+            self.firms.append(Firm(wage_n, capital_n_m, False, False))
 
         self.firms_s_p = []
         for _ in range(no_firm_s_p):
-            self.firms.append(Firm(no_workers_s_p, wage_s, capital_s_p))
+            self.firms.append(Firm(wage_s, capital_s_p))
 
         self.firms_s_m = []
         for _ in range(no_firm_s_m):
-            self.firms.append(Firm(no_workers_s_m, wage_s, capital_s_m, is_primary=False))
+            self.firms.append(Firm(wage_s, capital_s_m, is_primary=False))
+
+
 
     # def get_mean_primary_south_price(self):
     #     mean = 0
@@ -55,7 +59,6 @@ class World:
         return total_firm_manufactured_demand, total_workers_manufactured_demand
 
     y = []
-    csv = ''# 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.workers[0].remainder\tfirm.workers[1].remainder\n'
 
     def tick(self):
         print(f'--- {self.t} ------')
@@ -76,24 +79,30 @@ class World:
 
             if firm.is_primary:
                 total_production_primary += firm.price * firm.production
+                mean_price += firm.price
             else:
                 total_production_manufactured += firm.price * firm.production
 
-
-        # for firm in self.firms_n_m + self.firms_s_m:
-        #     total_production_manufactured += firm.price * firm.production
-        #
-        # for firm in self.firms_n_p + self.firms_s_p:
-        #     total_production_primary += firm.price * firm.production
-
-        if total_s_p + total_n_p != 0:
-            for firm in self.firms_s_p + self.firms_n_p:
-                mean_price += firm.price
+        if (total_s_p + total_n_p) != 0:
             mean_price = mean_price / (total_s_p + total_n_p)
 
+        # P&D
+        innovation_list = beta.rvs(a_beta, b_beta, x_beta[0], x_beta[1], len(self.firms))
+        #IMITATION
+        k = len(self.firms)
+        m = []
+        for i in range(len(self.firms)):
+            n = []
+            for j in range(k):
+                n.append(abs(self.firms[i].labor_productivity - self.firms[j].labor_productivity))
+            m.append(n)
+            if self.t == no_turns - 1:
+                print(n)
+            k -=1
+        #UPDATE
         i = 0
         for firm in self.firms:
-            firm.update(mean_price, total_production_primary, total_production_manufactured)
+            firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i])
             firm.id = i
             i += 1
 
@@ -102,33 +111,55 @@ class World:
 
 # MERCADO DOS PRODUTOS PRIMARIOS E MANUFATURADOS
 
-        for seller in self.firms[:total_s_p + total_n_p:]:
+        for seller in self.firms: # Primeira metade do vetor (Primarios)
             total_demand = self.get_total_demand_primary_tuple() if seller.is_primary \
                 else self.get_total_demand_manufactured_tuple()
 
-            for buyer in self.firms:
-                if buyer.is_primary:
-                    amount_to_buy = seller.production * buyer.get_primary_demand_firm() / total_demand[0]
-                    amount_to_buy_w = seller.production * buyer.get_primary_demand_workers() / total_demand[1]
+            for buyer in self.firms: # TODO: Separar o que do mundo e das fimas (proction * price)
+                demand_to_print = None
+                if seller.is_primary:
+                    amount_to_buy_p = seller.production * seller.price * buyer.get_primary_demand_firm() / total_demand[0]
+                    amount_to_buy_w_p = seller.production * seller.price * buyer.get_primary_demand_workers() / total_demand[1]
+                    demand_to_print = buyer.get_primary_demand_firm()
+
+                    # Venda
+                    seller.profit += (amount_to_buy_p + amount_to_buy_p)
+
+                    # Compra
+                    buyer.expense_p -= amount_to_buy_p
+                    buyer.workers[0].expense_p -= amount_to_buy_w_p / len(buyer.workers)
+
                 else:
-                    amount_to_buy = seller.production * buyer.get_manufactured_demand_firm() / total_demand[0]
-                    amount_to_buy_w = seller.production * buyer.get_manufactured_demand_workers() / total_demand[1]
+                    amount_to_buy_m = seller.production * seller.price * buyer.get_manufactured_demand_firm()/ total_demand[0]
+                    amount_to_buy_w_m = seller.production * seller.price * buyer.get_manufactured_demand_workers() / total_demand[1]
+                    demand_to_print = buyer.get_manufactured_demand_firm()
 
-                # Venda
-                seller.profit += amount_to_buy + amount_to_buy_w
+                    # Venda
+                    seller.profit += (amount_to_buy_m + amount_to_buy_m)
 
-                # Compra
-                buyer.last_profit -= amount_to_buy
-                buyer.workers[0].remainder -= amount_to_buy_w / len(buyer.workers)
+                    # Compra
+                    buyer.expense_m -= amount_to_buy_m
+                    # TODO: Conferir trabalhador explodindo!
+                    buyer.workers[0].expense_m -= amount_to_buy_w_m / len(buyer.workers)
+
+                if debug:
+                    self.demand_tsv += f'{seller.id}\t{amount_to_buy_m if not seller.is_primary else amount_to_buy_p}\t{demand_to_print}\t{seller.price}\t{seller.production}\t{buyer.id}\tp: {buyer.expense_p} m:{buyer.expense_m}\n'
+
+            seller.last_profit = seller.profit
+            seller.stock = seller.get_stock()
+            seller.demand = seller.profit / seller.price
 
         # Investir em P&D (aqui)
 
         self.y.append(mean_price)
         self.t += 1
-        for firm in self.firms_s_p + self.firms_s_m + self.firms_n_m + self.firms_n_p:
-            pass
-            #self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand}\t{firm.is_south}\t{firm.is_primary}\t{firm.workers[0].remainder}\t{firm.workers[1].remainder}\n'
 
+        if debug:
+            for firm in self.firms:
+                self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand_series}\t{firm.is_south}\t{firm.is_primary}\t{firm.workers[0].remainder}\t{firm.workers[1].remainder}\n'
+
+    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.workers[0].remainder\tfirm.workers[1].remainder\n'
+    demand_tsv = 'seller id\tamount to buy\t demand\tseller price\tseller prod\tbuyer_id\texpense\n'
     def run(self):
         for _ in range(no_turns):
             self.tick()
@@ -136,5 +167,8 @@ class World:
         # plt.show()
         with open('debug.tsv', 'w') as file:
             file.write(self.csv)
+
+        with open('debug_vendas.tsv', 'w') as file:
+            file.write(self.demand_tsv)
 
         print(f'Simulation finished after:{time.time() - self.start_time}')
