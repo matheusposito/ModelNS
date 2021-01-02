@@ -1,3 +1,4 @@
+import random
 import time
 from constants import *
 from firm import Firm
@@ -89,20 +90,41 @@ class World:
         # P&D
         innovation_list = beta.rvs(a_beta, b_beta, x_beta[0], x_beta[1], len(self.firms))
         #IMITATION
+        t = time.time()
         k = len(self.firms)
         m = []
-        for i in range(len(self.firms)):
+        for col in self.firms:
             n = []
-            for j in range(k):
-                n.append(abs(self.firms[i].labor_productivity - self.firms[j].labor_productivity))
+            for row in self.firms:
+                penalty = imitation_distance_penalty if not (row.is_south and col.is_south) else 0
+                d = abs(col.labor_productivity - row.labor_productivity) * (1 + penalty)
+                n.append(1 / d if d != 0 else 0)
             m.append(n)
             if self.t == no_turns - 1:
                 print(n)
-            k -=1
+                # print(time.time() - t)
+
         #UPDATE
         i = 0
         for firm in self.firms:
-            firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i])
+            a = m[i]
+            b = []
+            r = random.random() *  sum(m[i])
+            j = 0
+
+            for p in a:
+                if len(b) != 0:
+                    b.append(p + b[-1])
+                else:
+                    b.append(p)
+                if b[-1] > r:
+                    break
+                j += 1
+
+            j -= 1
+            # https://code.activestate.com/recipes/576564-walkers-alias-method-for-random-objects-with-diffe/
+
+            firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i], self.firms[j].labor_productivity)
             firm.id = i
             i += 1
 

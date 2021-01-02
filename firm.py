@@ -179,20 +179,20 @@ class Firm:
         else:
             return 0
 
-    def get_imitation(self):
+    def get_imitation(self, imitation_labor_productivity):
         if random.random() < min(theta_max_2, 1 - e ** (-xi_2 * self.get_investment_imitation())):
-            return 0
+            return imitation_labor_productivity
         else:
             return 0
 
-    def update_labor_productivity(self, innovation_beta):
-        self.labor_productivity = max(self.labor_productivity,self.labor_productivity * (1 + self.get_innovation(innovation_beta)),self.labor_productivity * (1 + self.get_imitation()))
+    def update_labor_productivity(self, innovation_beta, imitation_labor_productivity):
+        self.labor_productivity = max(self.labor_productivity,self.labor_productivity * (1 + self.get_innovation(innovation_beta)),self.labor_productivity * (1 + self.get_imitation(imitation_labor_productivity)))
 
 
 
-    def update(self, mean_price, total_production_primary, total_production_manufactured,innovation_beta):
+    def update(self, mean_price, total_production_primary, total_production_manufactured,innovation_beta, imitation_labor_productivity):
         self.update_ex_demand_series()
-        self.update_labor_productivity(innovation_beta)
+        self.update_labor_productivity(innovation_beta, imitation_labor_productivity)
         self.capital += self.get_investment() # O investimento depende de price e last_profit!
         self.production = self.get_production()
         if self.production <= 0:

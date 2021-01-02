@@ -57,3 +57,5 @@ x_beta = [-0.05,0.25]
 a_beta = 1
 b_beta = 5
 
+imitation_distance_penalty = 0.1
+
