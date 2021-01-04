@@ -6,3 +6,6 @@ venv/*
 /debug.tsv
 /.~lock.debug.tsv#
 __pycache__/
+debug
+debug_vendas.tsv
+hh.csv

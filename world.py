@@ -149,6 +149,7 @@ class World:
 
                     # Compra
                     buyer.expense_p -= amount_to_buy_p
+                    #TODO:ARRUMAR trabalhador
                     buyer.workers[0].expense_p -= amount_to_buy_w_p / len(buyer.workers)
 
                 else:
@@ -166,8 +167,8 @@ class World:
 
                 if debug:
                     self.demand_tsv += f'{seller.id}\t{amount_to_buy_m if not seller.is_primary else amount_to_buy_p}\t{demand_to_print}\t{seller.price}\t{seller.production}\t{buyer.id}\tp: {buyer.expense_p} m:{buyer.expense_m}\n'
-
-            seller.last_profit = seller.profit
+            #TODO TIRAR GASTO COM INOVAÇAO E GASTO COM INVESTIMENTO
+            seller.last_profit = seller.profit - seller.workers[0].wage
             seller.stock = seller.get_stock()
             seller.demand = seller.profit / seller.price
 
@@ -178,16 +179,16 @@ class World:
 
         if debug:
             for firm in self.firms:
-                self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand_series}\t{firm.is_south}\t{firm.is_primary}\t{firm.workers[0].remainder}\t{firm.workers[1].remainder}\n'
+                self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand_series}\t{firm.is_south}\t{firm.is_primary}\t{firm.workers[0].remainder}\n'
 
-    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.workers[0].remainder\tfirm.workers[1].remainder\n'
+    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.workers[0].remainder\n'
     demand_tsv = 'seller id\tamount to buy\t demand\tseller price\tseller prod\tbuyer_id\texpense\n'
     def run(self):
         for _ in range(no_turns):
             self.tick()
         plt.plot(range(len(self.y)), self.y)
         # plt.show()
-        with open('debug.tsv', 'w') as file:
+        with open(f'debug/_{time.clock()}', 'w') as file:
             file.write(self.csv)
 
         with open('debug_vendas.tsv', 'w') as file:
