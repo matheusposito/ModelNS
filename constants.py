@@ -9,7 +9,7 @@ real_wage = 1
 init_primary_price = 1
 init_manufacture_price = 1
 
-init_markup = 0
+init_markup = 2
 
 no_firm_s_m = 5
 no_firm_s_p = 5

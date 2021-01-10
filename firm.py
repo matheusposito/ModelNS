@@ -83,15 +83,15 @@ class Firm:
 
     def get_allocated_capital(self):
         #TODO: Reduzir o estoque () condicional a zerar caso seja menor q zero
-        return max(min((self.get_ex_demand() - self.stock) / self.capital_productivity, self.capital), 0)
+        return max(min((self.get_ex_demand() - self.stock) / self.capital_productivity, self.capital - (self.stock / self.capital_productivity)), 0)
 
     def _get_investment_primary(self):
-        #TODO não é o preço dele
-        return self.last_profit * savings_rate / self.price
+        return (gamma_0 + gamma_1 * (self.get_allocated_capital() / self.capital)) * self.capital
 
     def _get_investment_manufacture(self):
         return (gamma_0 + gamma_1 * (self.get_allocated_capital() / self.capital)) * self.capital
 
+    # arredonda para cima
     def get_allocated_labor(self):
         return math.ceil(self.get_allocated_capital() * self.capital_productivity / self.labor_productivity)
 
@@ -104,34 +104,32 @@ class Firm:
         else:
             return self.get_production() / total_production_manufactured
 
-#TODO Não está atualizando o markup!!!!!
     def get_markup(self, total_production_primary, total_production_manufactured):
         if self.is_primary:
-            return self.markup * (1 + market_share_sensibility * (self.get_market_share(total_production_primary, total_production_manufactured) -
-                                                              self.last_market_share) / self.last_market_share)
+            return self.markup * (1 + market_share_sensibility * ((self.get_market_share(total_production_primary, total_production_manufactured) -
+                                                              self.last_market_share))/ self.last_market_share)
         else:
-            return self.markup * (1 + market_share_sensibility * (self.get_market_share(total_production_primary, total_production_manufactured) -
-                                                              self.last_market_share) / self.last_market_share)
+            return self.markup * (1 + market_share_sensibility * ((self.get_market_share(total_production_primary, total_production_manufactured) -
+                                                              self.last_market_share)) / self.last_market_share)
 
     @staticmethod
-    def _get_wage_primary(mean_price, total_production_primary, total_production_manufactured):
-        return real_wage
+    def _get_wage_primary(mean_price):
+        return real_wage * mean_price
 
-    # TODO: LEMBRAR DE ARRUMAR PREÇO!!!
+    def _get_wage_manufacture(self, mean_price):
+        return (1 / (1  + self.markup) * self.last_profit) / self.get_allocated_labor()
 
-    def _get_wage_manufacture(self, mean_price, total_production_primary, total_production_manufactured):
-        return real_wage
 
     def _get_primary_price(self, mean_price, total_production_primary, total_production_manufactured):
-        return (1 + self.markup) * self.get_wage(mean_price, total_production_primary, total_production_manufactured) / self.labor_productivity
+        return ((1 + self.markup) * self.get_wage(mean_price) / self.labor_productivity)
 
     def _get_manufacture_price(self, mean_price, total_production_primary, total_production_manufactured):
-        return (1 + self.markup) * self.get_wage(mean_price, total_production_primary, total_production_manufactured) / self.labor_productivity
+        return ((1 + self.markup) * self.get_wage(mean_price) / self.labor_productivity)
 
-    def update_workers(self, mean_price, total_production_primary, total_production_manufactured):
+    def update_workers(self, mean_price):
         remainder = self.workers[0].expense_p + self.workers[0].expense_m # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
 
-        wage = self.get_wage(mean_price, total_production_primary, total_production_manufactured)
+        wage = self.get_wage(mean_price)
         no_workers = self.get_allocated_labor()
 
         if no_workers <= 0:
@@ -140,7 +138,7 @@ class Firm:
         if self.id == 0:
             print(no_workers)
         for i in range(1): # -1 é o ultimo elemento da lista que é mais rapida com "_"
-            self.workers.append(Worker(self.get_wage(mean_price, total_production_primary, total_production_manufactured),
+            self.workers.append(Worker(self.get_wage(mean_price),
                                        self.is_south, remainder / no_workers))
             self.workers[i].remainder *= no_workers
             self.workers[i].remainder += wage * no_workers
@@ -195,12 +193,17 @@ class Firm:
     def update_labor_productivity(self, innovation_beta, imitation_labor_productivity):
         self.labor_productivity = max(self.labor_productivity,self.labor_productivity * (1 + self.get_innovation(innovation_beta)), imitation_labor_productivity)
 
+    def get_south_spend_rate(self):
+        pass
 
+    def get_north_spend_rate(self):
+        pass
 
     def update(self, mean_price, total_production_primary, total_production_manufactured,innovation_beta, imitation_labor_productivity):
         self.update_ex_demand_series()
         self.update_labor_productivity(innovation_beta, imitation_labor_productivity)
-        self.capital += self.get_investment() # O investimento depende de price e last_profit!
+        self.markup = self.get_markup(total_production_primary, total_production_manufactured)
+        self.capital += self.get_investment()
         self.production = self.get_production()
         if self.production <= 0:
             self.stock = 0
@@ -209,7 +212,7 @@ class Firm:
             self.production = self.get_production()
 
 
-        self.update_workers(mean_price, total_production_primary, total_production_manufactured)
+        self.update_workers(mean_price)
 
 #       self.stock = self.production
         self.price = self.get_price(mean_price, total_production_primary, total_production_manufactured)
