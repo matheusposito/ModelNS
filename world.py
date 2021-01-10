@@ -14,19 +14,15 @@ class World:
         self.t = 0
         self.start_time = time.time()
         self.firms = []
-        self.firms_n_p = []
         for _ in range(no_firm_n_p):
             self.firms.append(Firm(wage_n, capital_n_p, False))
 
-        self.firms_n_m = []
         for _ in range(no_firm_n_m):
             self.firms.append(Firm(wage_n, capital_n_m, False, False))
 
-        self.firms_s_p = []
         for _ in range(no_firm_s_p):
             self.firms.append(Firm(wage_s, capital_s_p))
 
-        self.firms_s_m = []
         for _ in range(no_firm_s_m):
             self.firms.append(Firm(wage_s, capital_s_m, is_primary=False))
 
