@@ -1,9 +1,9 @@
 
 debug = True
-no_turns = 10
+no_turns = 30
 
-wage_s = 1.0
-wage_n = 1.0
+wage_s = 1
+wage_n = 1
 
 real_wage = 1
 init_primary_price = 1

@@ -59,6 +59,18 @@ class World:
 
     def tick(self):
         print(f'--- {self.t} ------')
+        i = 0
+        idx_to_remove = []
+        for firm in self.firms:
+            if firm.price <= 0 or firm.production <= 0:
+                idx_to_remove.append(i)
+            i += 1
+
+        for itr in idx_to_remove:
+            self.firms(itr)
+
+
+
         mean_price = 0
         total_production_manufactured = 0
         total_production_primary = 0
@@ -99,9 +111,10 @@ class World:
             if self.t == no_turns - 1:
                 print(n)
                 # print(time.time() - t)
-
         #UPDATE
+        #TODO: Explicar cada letra
         i = 0
+        to_imitate_list = []
         for firm in self.firms:
             a = m[i]
             b = []
@@ -118,9 +131,18 @@ class World:
                 j += 1
 
             j -= 1
+            to_imitate_list.append(j)
             # https://code.activestate.com/recipes/576564-walkers-alias-method-for-random-objects-with-diffe/
 
-            firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i], self.firms[j].labor_productivity)
+            # firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i], self.firms[j].labor_productivity)
+
+            firm.id = i
+            i += 1
+        i = 0
+
+
+        for firm in self.firms:
+            firm.update(mean_price, total_production_primary, total_production_manufactured,innovation_list[i], self.firms[to_imitate_list[i]].labor_productivity)
             firm.id = i
             i += 1
 
@@ -133,51 +155,85 @@ class World:
             total_demand = self.get_total_demand_primary_tuple() if seller.is_primary \
                 else self.get_total_demand_manufactured_tuple()
 
-            for buyer in self.firms: # TODO: Separar o que do mundo e das fimas (proction * price)
+            pc_primary = 0
+            pc_manufactured = 0
+            pc_primary_w = 0
+            pc_manufactured_w = 0
+            for buyer in self.firms: # TODO: Separar o que do mundo e das firmas (production * price)
                 demand_to_print = None
+
+
                 if seller.is_primary:
-                    amount_to_buy_p = seller.production * seller.price * buyer.get_primary_demand_firm() / total_demand[0]
-                    amount_to_buy_w_p = seller.production * seller.price * buyer.get_primary_demand_workers() / total_demand[1]
+
+                    if total_demand[0] != 0:
+                        pc_primary += buyer.get_primary_demand_firm() / total_demand[0] *  buyer.profit_rate
+                    if total_demand[1] != 0:
+                        pc_primary_w += buyer.get_primary_demand_workers() / total_demand[1] # * (1 - buyer.profit_rate)
+
+                    if total_demand[0] != 0:
+                        amount_to_buy_p = seller.production * seller.price * buyer.profit_rate * buyer.get_primary_demand_firm() / total_demand[0]
+                    if total_demand[1] != 0:
+                        amount_to_buy_w_p = seller.production * seller.price * (1 - buyer.profit_rate) * (buyer.get_primary_demand_workers() / total_demand[1])
+
                     demand_to_print = buyer.get_primary_demand_firm()
 
-                    # Venda
-                    seller.profit += (amount_to_buy_p + amount_to_buy_p)
-
                     # Compra
-                    buyer.expense_p -= amount_to_buy_p
-                    #TODO:ARRUMAR trabalhador
-                    buyer.workers[0].expense_p -= amount_to_buy_w_p / len(buyer.workers)
+                    effective_purchase = min(amount_to_buy_p, buyer.expense_p)
+                    buyer.expense_p -= effective_purchase
+                    if total_demand[1] < 0:
+                        print('')
+
+                    effective_purchase_w = min(amount_to_buy_w_p / buyer.no_workers, buyer.std_worker.expense_p)
+                    buyer.std_worker.expense_p -= effective_purchase_w
+                    if buyer.std_worker.expense_p < 0:
+                        print('')
+
+                    # Venda
+                    seller.profit += (effective_purchase + effective_purchase_w * buyer.no_workers)
 
                 else:
-                    amount_to_buy_m = seller.production * seller.price * buyer.get_manufactured_demand_firm()/ total_demand[0]
-                    amount_to_buy_w_m = seller.production * seller.price * buyer.get_manufactured_demand_workers() / total_demand[1]
+
+                    if total_demand[0] != 0:
+                        pc_manufactured += buyer.get_manufactured_demand_firm() / total_demand[0] *  buyer.profit_rate
+                    if total_demand[1] != 0:
+                        pc_manufactured_w += buyer.get_manufactured_demand_workers() / total_demand[1] # * (1 - buyer.profit_rate)
+
+                    if total_demand[0] != 0:
+                        amount_to_buy_m = seller.production * seller.price * buyer.profit_rate * buyer.get_manufactured_demand_firm() / total_demand[0]
+                    if total_demand[1] != 0:
+                        amount_to_buy_w_m = seller.production * seller.price * (1 - buyer.profit_rate) * (buyer.get_manufactured_demand_workers() / total_demand[1])
+
                     demand_to_print = buyer.get_manufactured_demand_firm()
 
-                    # Venda
-                    seller.profit += (amount_to_buy_m + amount_to_buy_m)
-
                     # Compra
-                    buyer.expense_m -= amount_to_buy_m
-                    # TODO: Conferir trabalhador explodindo!
-                    buyer.workers[0].expense_m -= amount_to_buy_w_m / len(buyer.workers)
+                    effective_purchase = min(amount_to_buy_m, buyer.expense_m)
+                    buyer.expense_m -= effective_purchase
+                    if total_demand[1] < 0:
+                        print('')
+
+                    effective_purchase_w = min(amount_to_buy_w_m / buyer.no_workers, buyer.std_worker.expense_m)
+                    buyer.std_worker.expense_m -= effective_purchase_w
+                    if buyer.std_worker.expense_m < 0:
+                        print('')
+
+                    # Venda
+                    seller.profit += (effective_purchase + effective_purchase_w * buyer.no_workers)
 
                 if debug:
                     self.demand_tsv += f'{seller.id}\t{amount_to_buy_m if not seller.is_primary else amount_to_buy_p}\t{demand_to_print}\t{seller.price}\t{seller.production}\t{buyer.id}\tp: {buyer.expense_p} m:{buyer.expense_m}\n'
             #TODO TIRAR GASTO COM INOVAÇAO E GASTO COM INVESTIMENTO
-            seller.last_profit = seller.profit - seller.workers[0].wage
+            seller.last_profit = seller.profit - seller.std_worker.wage * seller.no_workers
             seller.stock = seller.get_stock()
             seller.demand = seller.profit / seller.price
-
-        # Investir em P&D (aqui)
 
         self.y.append(mean_price)
         self.t += 1
 
         if debug:
             for firm in self.firms:
-                self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand_series}\t{firm.is_south}\t{firm.is_primary}\t{firm.workers[0].remainder}\n'
+                self.csv += f'{self.t}\t{firm.production}\t{firm.last_profit}\t{firm.market_share}\t{firm.markup}\t{firm.price}\t{firm.demand_series}\t{firm.is_south}\t{firm.is_primary}\t{firm.std_worker.remainder}\n'
 
-    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.workers[0].remainder\n'
+    csv = 'turn\tfirm.production\tfirm.last_profit\tfirm.market_share\tfirm.markup\tfirm.price\tfirm.demand\tis.south\tis.primary\tfirm.std_worker.remainder\n'
     demand_tsv = 'seller id\tamount to buy\t demand\tseller price\tseller prod\tbuyer_id\texpense\n'
     def run(self):
         for _ in range(no_turns):

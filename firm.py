@@ -5,10 +5,10 @@ import random
 from math import e
 from worker import Worker
 
-#TODO: DIVIDIR RECEITA DE PROFIT, DESCONTRAR INVESTIMENTO E P&D ANTES DE COMPRAR PRIMARIO E CONFERIR O QUE ESTÁ ACONTECENDO COM STOCKS, PROFIT, RECEITA, buyer.expense_m e remender!!!
+#TODO: DIVIDIR RECEITA DE PROFIT, DESCONTAR INVESTIMENTO E P&D ANTES DE COMPRAR PRIMARIO E CONFERIR O QUE ESTÁ ACONTECENDO COM STOCKS, PROFIT, RECEITA, buyer.expense_m e remender!!!
 class Firm:
     def __str__(self):
-        return f'South: {self.is_south}, Primary: {self.is_primary}, Production: {self.production}, Price: {self.price}'
+        return f'{self.__hash__()} South: {self.is_south}, Primary: {self.is_primary}, Markup:{self.markup}, Marketshare: {self.market_share} profit: {self.profit}, Production: {self.production}, Price: {self.price}, no_worker:{self.no_workers}, w_remender: {self.std_worker.remainder} dmd series: {self.demand_series}'
 
     def __init__(self, initial_wage, capital, is_south=True, is_primary=True):
         self.is_south = is_south
@@ -51,12 +51,15 @@ class Firm:
         self.profit = self.last_profit
         self.expense_p = self.last_profit * self.primary_spend_rate
         self.expense_m = self.last_profit * (1 - self.primary_spend_rate)
-
-        self.workers = []
-        for _ in range(self.get_allocated_labor()):
-            self.workers.append(Worker(initial_wage, is_south))
+        self.no_workers = self.get_allocated_labor()
 
 
+        # Hack para deixar calculo mais rapido, voltar caso trabalhadores passsem a ser agentes
+        self.std_worker = Worker(initial_wage * self.no_workers, self.is_south, 0)
+        # for _ in range(self.get_allocated_labor()):
+        #     self.workers.append(Worker(initial_wage, is_south))
+
+        self.profit_rate = self.get_profit_rate()
     @staticmethod
     #TODO: Retirar a variavel demand e colocar em função da proporção do consumo e da renda inicial
     def init_demand(is_south, is_primary):
@@ -83,7 +86,8 @@ class Firm:
 
     def get_allocated_capital(self):
         #TODO: Reduzir o estoque () condicional a zerar caso seja menor q zero
-        return max(min((self.get_ex_demand() - self.stock) / self.capital_productivity, self.capital - (self.stock / self.capital_productivity)), 0)
+        alloc_cap = max(min((self.get_ex_demand() - self.stock) / self.capital_productivity, self.capital - (self.stock / self.capital_productivity)), 0)
+        return  alloc_cap
 
     def _get_investment_primary(self):
         return (gamma_0 + gamma_1 * (self.get_allocated_capital() / self.capital)) * self.capital
@@ -93,7 +97,10 @@ class Firm:
 
     # arredonda para cima
     def get_allocated_labor(self):
-        return math.ceil(self.get_allocated_capital() * self.capital_productivity / self.labor_productivity)
+        n_workers = math.ceil(self.get_allocated_capital() * self.capital_productivity / self.labor_productivity)
+        if self.id == 0:
+            print(1)
+        return  n_workers
 
     def get_production(self):
         return self.get_allocated_capital() * self.capital_productivity
@@ -112,12 +119,13 @@ class Firm:
             return self.markup * (1 + market_share_sensibility * ((self.get_market_share(total_production_primary, total_production_manufactured) -
                                                               self.last_market_share)) / self.last_market_share)
 
-    @staticmethod
-    def _get_wage_primary(mean_price):
-        return real_wage * mean_price
+    #@staticmethod
+    def _get_wage_primary(self, mean_price):
+        return (1 / (1 + self.markup) * self.last_profit) / self.no_workers
+        #return real_wage
 
     def _get_wage_manufacture(self, mean_price):
-        return (1 / (1  + self.markup) * self.last_profit) / self.get_allocated_labor()
+        return (1 / (1  + self.markup) * self.last_profit) / self.no_workers
 
 
     def _get_primary_price(self, mean_price, total_production_primary, total_production_manufactured):
@@ -126,44 +134,43 @@ class Firm:
     def _get_manufacture_price(self, mean_price, total_production_primary, total_production_manufactured):
         return ((1 + self.markup) * self.get_wage(mean_price) / self.labor_productivity)
 
-    def update_workers(self, mean_price):
-        remainder = self.workers[0].expense_p + self.workers[0].expense_m # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
+    def update_std_worker(self, mean_price):
+        self.std_worker.remainder = self.std_worker.expense_p + self.std_worker.expense_m # Redistribuimos qualquer recurso que tenha sobrado por destruir trabalhadores todo turno
 
-        wage = self.get_wage(mean_price)
-        no_workers = self.get_allocated_labor()
+        self.std_worker.wage = self.get_wage(mean_price)
 
-        if no_workers <= 0:
+        if self.no_workers <= 0:
             print(0)
-        self.workers = []
         if self.id == 0:
-            print(no_workers)
-        for i in range(1): # -1 é o ultimo elemento da lista que é mais rapida com "_"
-            self.workers.append(Worker(self.get_wage(mean_price),
-                                       self.is_south, remainder / no_workers))
-            self.workers[i].remainder *= no_workers
-            self.workers[i].remainder += wage * no_workers
-            self.workers[i].expense_p = self.workers[i].remainder * self.workers[i].worker_primary_spend_rate * no_workers
-            self.workers[i].expense_m = self.workers[i].remainder * (1 - self.workers[i].worker_primary_spend_rate) * no_workers
-            self.workers[i].remainder = 0
+            print( f'No Workers f0: {self.no_workers}')
+
+        self.std_worker.remainder += self.std_worker.wage
+        self.std_worker.expense_p = self.std_worker.remainder * self.std_worker.worker_primary_spend_rate
+        if self.std_worker.remainder < 0:
+            print('')
+        self.std_worker.expense_m = self.std_worker.remainder * (1 - self.std_worker.worker_primary_spend_rate)
+        self.std_worker.remainder = 0
 
 
     def get_primary_demand_firm(self):
         return self.expense_p
 
     def get_primary_demand_workers(self):
-        if len(self.workers) <= 0:
+        if self.no_workers <= 0:
             return 0
 
-        return self.workers[0].expense_p * len(self.workers)
+        return self.std_worker.expense_p * self.no_workers
 
     def get_manufactured_demand_firm(self):
         return self.expense_m
 
     def get_manufactured_demand_workers(self):
-        if len(self.workers) <= 0:
+        if self.no_workers <= 0:
             return 0
-
-        return self.workers[0].expense_m * len(self.workers)
+        d = self.std_worker.expense_m * self.no_workers
+        if d < 0:
+            print('')
+        return d
 
     def get_stock(self):
         return (self.production * self.price - self.profit) / self.price
@@ -191,7 +198,8 @@ class Firm:
             return 0
 
     def update_labor_productivity(self, innovation_beta, imitation_labor_productivity):
-        self.labor_productivity = max(self.labor_productivity,self.labor_productivity * (1 + self.get_innovation(innovation_beta)), imitation_labor_productivity)
+        return
+        #self.labor_productivity = max(self.labor_productivity,self.labor_productivity * (1 + self.get_innovation(innovation_beta)), imitation_labor_productivity)
 
     def get_south_spend_rate(self):
         pass
@@ -199,23 +207,42 @@ class Firm:
     def get_north_spend_rate(self):
         pass
 
+    def get_profit_rate(self):
+        if self.production == 0 or self.price == 0:
+            print(f'[ERROR] firm id: {self.id}: Prod  ou price nao podem ser 0 price:{self.price} | prod:{self.production}')
+            return .5
+        profit_rate = (self.production * self.price - self.std_worker.wage * self.no_workers) / self.production * self.price
+        return profit_rate
+
     def update(self, mean_price, total_production_primary, total_production_manufactured,innovation_beta, imitation_labor_productivity):
+        if self.id == 0:
+            print(f'ex demand : {self.get_ex_demand()}\n{self}')
+
         self.update_ex_demand_series()
         self.update_labor_productivity(innovation_beta, imitation_labor_productivity)
         self.markup = self.get_markup(total_production_primary, total_production_manufactured)
         self.capital += self.get_investment()
         self.production = self.get_production()
-        if self.production <= 0:
-            self.stock = 0
-            self.wage = 1
-            self.capital = 16
-            self.production = self.get_production()
+        self.no_workers = self.get_allocated_labor()
+        # mecanismo de falencia
+        if self.production <= 0 or self.profit <= 0:
+            id = self.id
+            self.__init__(wage_s if self.is_south else wage_n, 16, self.is_south, self.is_primary)
+            self.id = id
+            # self.stock = 0
+            # self.wage = 1
+            # self.capital = 16
+            # self.demand_series = d
+            # self.production = self.get_production()
+            # self.no_workers = self.get_allocated_labor()
 
 
-        self.update_workers(mean_price)
+        self.update_std_worker(mean_price)
 
 #       self.stock = self.production
         self.price = self.get_price(mean_price, total_production_primary, total_production_manufactured)
         self.profit = 0
         self.expense_p = self.last_profit * self.primary_spend_rate
         self.expense_m = self.last_profit * (1 - self.primary_spend_rate)
+        self.profit_rate = self.get_profit_rate()
+        return False
